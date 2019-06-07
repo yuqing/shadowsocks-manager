@@ -15,11 +15,17 @@ app.controller('AdminNoticeController', ['$scope', '$http', '$state', ($scope, $
     $state.go('admin.editNotice', { noticeId: id });
   };
 }])
-.controller('AdminEditNoticeController', ['$scope', '$http', '$state', '$stateParams', 'markdownDialog', ($scope, $http, $state, $stateParams, markdownDialog) => {
+.controller('AdminEditNoticeController', ['$scope', '$http', '$state', '$stateParams', 'markdownDialog', 'setNoticeGroupDialog', ($scope, $http, $state, $stateParams, markdownDialog, setNoticeGroupDialog) => {
   $scope.setTitle('编辑公告');
   $scope.setMenuButton('arrow_back', 'admin.notice');
   $http.get('/api/admin/notice/' + $stateParams.noticeId).then(success => {
     $scope.notice = success.data;
+    $scope.notice.groupObj = {};
+    if($scope.notice.group) {
+      $scope.notice.groups.forEach(groupId => {
+        $scope.notice.groupObj[groupId] = true;
+      });
+    }
   });
   $scope.delete = () => {
     $http.delete('/api/admin/notice/' + $stateParams.noticeId).then(success => {
@@ -30,6 +36,9 @@ app.controller('AdminNoticeController', ['$scope', '$http', '$state', ($scope, $
     $http.put('/api/admin/notice/' + $stateParams.noticeId, {
       title: $scope.notice.title,
       content: $scope.notice.content,
+      group: $scope.notice.group,
+      autopop: $scope.notice.autopop,
+      groups: $scope.notice.groups,
     }).then(success => {
       $state.go('admin.notice');
     });
@@ -37,9 +46,30 @@ app.controller('AdminNoticeController', ['$scope', '$http', '$state', ($scope, $
   $scope.preview = () => {
     markdownDialog.show($scope.notice.title, $scope.notice.content);
   };
+  $http.get('/api/admin/group').then(success => {
+    $scope.groups = success.data;
+    // $scope.groups.unshift({ id: -1, name: '所有组', comment: '所有组' });
+  });
+  $scope.setNoticeGroup = () => {
+    setNoticeGroupDialog.show($scope.notice, $scope.groups);
+  };
+  $scope.$watch('notice.groupObj', () => {
+    if($scope.notice && $scope.notice.group) {
+      $scope.notice.groups = [];
+      for(const go in $scope.notice.groupObj) {
+        if($scope.notice.groupObj[go]) {
+          $scope.notice.groups.push(+go);
+        }
+      }
+    }
+  }, true);
 }])
-.controller('AdminNewNoticeController', ['$scope', '$http', '$state', 'markdownDialog', ($scope, $http, $state, markdownDialog) => {
+.controller('AdminNewNoticeController', ['$scope', '$http', '$state', 'markdownDialog', 'setNoticeGroupDialog', ($scope, $http, $state, markdownDialog, setNoticeGroupDialog) => {
   $scope.setTitle('新增公告');
+  $scope.notice = {
+    group: 0,
+    groupObj: {},
+  };
   $scope.setMenuButton('arrow_back', 'admin.notice');
   $scope.cancel = () => {
     $state.go('admin.notice');
@@ -48,6 +78,9 @@ app.controller('AdminNoticeController', ['$scope', '$http', '$state', ($scope, $
     $http.post('/api/admin/notice/', {
       title: $scope.notice.title,
       content: $scope.notice.content,
+      group: $scope.notice.group,
+      groups: $scope.notice.groups,
+      autopop: $scope.notice.autopop,
     }).then(success => {
       $state.go('admin.notice');
     });
@@ -55,5 +88,22 @@ app.controller('AdminNoticeController', ['$scope', '$http', '$state', ($scope, $
   $scope.preview = () => {
     markdownDialog.show($scope.notice.title, $scope.notice.content);
   };
+  $http.get('/api/admin/group').then(success => {
+    $scope.groups = success.data;
+    // $scope.groups.unshift({ id: -1, name: '所有组', comment: '所有组' });
+  });
+  $scope.setNoticeGroup = () => {
+    setNoticeGroupDialog.show($scope.notice, $scope.groups);
+  };
+  $scope.$watch('notice.groupObj', () => {
+    if($scope.notice && $scope.notice.group) {
+      $scope.notice.groups = [];
+      for(const go in $scope.notice.groupObj) {
+        if($scope.notice.groupObj[go]) {
+          $scope.notice.groups.push(+go);
+        }
+      }
+    }
+  }, true);
 }])
 ;

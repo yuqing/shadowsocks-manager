@@ -1,17 +1,21 @@
 const app = angular.module('app');
 
 app
-  .controller('HomeController', ['$scope', '$mdMedia', '$mdSidenav', '$state', '$http', '$timeout', '$localStorage',
-    ($scope, $mdMedia, $mdSidenav, $state, $http, $timeout, $localStorage) => {
-      if ($localStorage.home.status === 'normal') {
-        $state.go('user.index');
-      } else if ($localStorage.home.status === 'admin') {
-        $state.go('admin.index');
+  .controller('HomeController', ['$scope', '$mdMedia', '$mdSidenav', '$state', '$http', '$timeout', '$localStorage', 'configManager',
+    ($scope, $mdMedia, $mdSidenav, $state, $http, $timeout, $localStorage, configManager) => {    
+      const config = configManager.getConfig();
+      if(config.status === 'normal') {
+        return $state.go('user.index');
+      } else if (config.status === 'admin') {
+        return $state.go('admin.index');
       } else {
         $localStorage.admin = {};
         $localStorage.user = {};
         $scope.setMainLoading(false);
       }
+      $scope.setConfig(config);
+      $scope.home = {};
+
       $scope.innerSideNav = true;
       $scope.menuButton = function() {
         if ($mdMedia('gt-sm')) {
@@ -41,38 +45,27 @@ app
   ])
   .controller('HomeIndexController', ['$scope', '$state',
     ($scope, $state) => {
-      $scope.icons = [{
-        icon: 'flash_on',
-        title: '快速搭建',
-        content: '仅依赖Node.js，无需安装数据库（可选MySQL）',
-      }, {
-        icon: 'build',
-        title: '易于配置',
-        content: '带有插件系统，仅需修改配置文件即可运行',
-      }, {
-        icon: 'vpn_key',
-        title: '官方标准',
-        content: '支持libev和python版本的标准manager API',
-      }];
       $scope.login = () => { $state.go('home.login'); };
       $scope.signup = () => { $state.go('home.signup'); };
     }
   ])
-  .controller('HomeLoginController', ['$scope', '$state', 'homeApi', 'alertDialog', '$localStorage',
-    ($scope, $state, homeApi, alertDialog, $localStorage) => {
+  .controller('HomeLoginController', ['$scope', '$state', 'homeApi', 'alertDialog', '$localStorage', 'configManager',
+    ($scope, $state, homeApi, alertDialog, $localStorage, configManager) => {
       $scope.user = {};
       $scope.login = () => {
         alertDialog.loading().then(() => {
           return homeApi.userLogin($scope.user.email, $scope.user.password);
         }).then(success => {
-          $localStorage.home.status = success;
+          $scope.setId(success.id);
+          // $localStorage.home.status = success.type;
           return alertDialog.close().then(() => {
             return success;
           });
         }).then(success => {
-          if (success === 'normal') {
+          configManager.deleteConfig();
+          if (success.type === 'normal') {
             $state.go('user.index');
-          } else if (success === 'admin') {
+          } else if (success.type === 'admin') {
             $state.go('admin.index');
           }
         }).catch(err => {
@@ -94,15 +87,18 @@ app
           $scope.login();
         }
       };
+      $scope.socialLogin = () => {
+        $state.go('home.social');
+      };
     }
   ])
-  .controller('HomeSignupController', ['$scope', '$state', '$interval', '$timeout', 'homeApi', 'alertDialog',
-    ($scope, $state, $interval, $timeout, homeApi, alertDialog) => {
+  .controller('HomeSignupController', ['$scope', '$state', '$interval', '$timeout', 'homeApi', 'alertDialog', '$localStorage', 'configManager',
+    ($scope, $state, $interval, $timeout, homeApi, alertDialog, $localStorage, configManager) => {
       $scope.user = {};
       $scope.sendCodeTime = 0;
       $scope.sendCode = () => {
         alertDialog.loading().then(() => {
-          return homeApi.sendCode($scope.user.email);
+          return homeApi.sendCode($scope.user.email, $scope.home.refId);
         })
         .then(success => {
           alertDialog.show('验证码已发至邮箱', '确定');
@@ -121,11 +117,16 @@ app
       };
       $scope.signup = () => {
         alertDialog.loading().then(() => {
-          return homeApi.userSignup($scope.user.email, $scope.user.code, $scope.user.password);
+          return homeApi.userSignup($scope.user.email, $scope.user.code, $scope.user.password, $scope.home.refId);
         })
-        .then(success => {
+        .then(userType => {
           alertDialog.show('用户注册成功', '确定').then(success => {
-            $state.go('home.login');
+            configManager.deleteConfig();
+            if(userType === 'admin') {
+              $state.go('admin.index');
+            } else {
+              $state.go('user.index');
+            }
           });
         }).catch(err => {
           alertDialog.show(err, '确定');
@@ -135,6 +136,10 @@ app
   ])
   .controller('HomeResetPasswordController', ['$scope', '$http', '$state', '$stateParams', 'alertDialog',
     ($scope, $http, $state, $stateParams, alertDialog) => {
+      if($scope.config.status) {
+        alertDialog.show('请先退出登录再访问重置密码链接', '确定');
+        return; 
+      }
       $scope.user = {};
       const token = $stateParams.token;
       alertDialog.loading().then(() => {
@@ -165,17 +170,143 @@ app
       };
     }
   ])
-  .controller('HomeMacLoginController', ['$scope', '$http', '$state', '$stateParams', '$localStorage',
-  ($scope, $http, $state, $stateParams, $localStorage) => {
-    const mac = $stateParams.mac;
-    $http.post('/api/home/macLogin', {
-      mac,
-    }).then(() => {
-      $localStorage.home.status = 'normal';
-      $state.go('user.index');
-    }).catch(() => {
-      $state.go('home.index');
-    });
-  }
-])
+  .controller('HomeMacLoginController', ['$scope', '$http', '$state', '$stateParams', '$localStorage', 'configManager', 'alertDialog',
+    ($scope, $http, $state, $stateParams, $localStorage, configManager, alertDialog) => {
+      if($scope.config.status) {
+        alertDialog.show('请先退出登录再访问mac登录链接', '确定');
+        return; 
+      }
+      const mac = $stateParams.mac;
+      configManager.deleteConfig();
+      $http.post('/api/home/macLogin', {
+        mac,
+      }).then(() => {
+        $localStorage.user = {};
+        $state.go('user.index');
+      }).catch(() => {
+        $localStorage.home = {};
+        $localStorage.user = {};
+        $state.go('home.index');
+      });
+    }
+  ])
+  .controller('HomeTelegramLoginController', ['$scope', '$http', '$state', '$stateParams', '$localStorage', 'configManager', 'alertDialog',
+    ($scope, $http, $state, $stateParams, $localStorage, configManager, alertDialog) => {
+      if($scope.config.status) {
+        alertDialog.show('请先退出登录再访问telegram登录链接', '确定');
+        return; 
+      }
+      const token = $stateParams.token;
+      configManager.deleteConfig();
+      $http.post('/api/user/telegram/login', {
+        token,
+      }).then(() => {
+        $localStorage.user = {};
+        $state.go('user.index');
+      }).catch(() => {
+        $localStorage.home = {};
+        $localStorage.user = {};
+        $state.go('home.index');
+      });
+    }
+  ])
+  .controller('HomeRefController', ['$scope', '$state', '$stateParams', '$http', 'alertDialog',
+    ($scope, $state, $stateParams, $http, alertDialog) => {
+      if($scope.config.status) {
+        alertDialog.show('请先退出登录再访问邀请链接', '确定');
+        return; 
+      }
+      const refId = $stateParams.refId;
+      $scope.home.refId = refId;
+      $scope.home.refIdValid = false;
+      $http.post(`/api/home/ref/${ refId }`).then(success => {
+        $scope.home.refIdValid = success.data.valid;
+        $state.go('home.signup');
+      });
+    }
+  ])
+  .controller('HomeRefInputController', ['$scope', '$state', '$stateParams', '$http', 'alertDialog',
+    ($scope, $state, $stateParams, $http, alertDialog) => {
+      if($scope.config.status) {
+        alertDialog.show('请先退出登录再访问此链接', '确定');
+        return; 
+      }
+      $scope.home.refInput = true;
+      $state.go('home.signup');
+    }
+  ])
+  .controller('HomeSocialLoginController', ['$scope', '$state', '$http', 'configManager', 'alertDialog', '$window', '$document',
+    ($scope, $state, $http, configManager, alertDialog, $window, $document) => {
+      $scope.back = () => {
+        $state.go('home.login');
+      };
+      let auth2;
+      $window.gapiInit = () => {
+        auth2 = gapi.auth2.getAuthInstance();
+        auth2.isSignedIn.listen(signInChanged);
+        if(auth2.isSignedIn.get() === true) {
+          auth2.signIn();
+        }
+      };
+
+      const signInChanged = isSignedIn => {
+        if(isSignedIn) {
+          const googleUser = auth2.currentUser.get();
+          const authResponse = googleUser.getAuthResponse();
+          const token = authResponse.id_token;
+          alertDialog.loading().then(() => {
+            return $http.post('/api/home/googleLogin', {
+              token,
+            });
+          }).then(success => {
+            alertDialog.close();
+            auth2.disconnect();
+            $scope.setId(success.data.id);
+            configManager.deleteConfig();
+            if (success.data.type === 'normal') {
+              $state.go('user.index');
+            } else if (success.data.type === 'admin') {
+              $state.go('admin.index');
+            }
+          }).catch(err => {
+            alertDialog.show('登录失败', '确定');
+          });
+        }
+      };
+
+      $window.fbInit = function() {
+        FB.init({ 
+          appId: $scope.config.facebook_login,
+          status: true, 
+          cookie: true, 
+          xfbml: true,
+          version: 'v2.4'
+        });
+      };
+
+      $window.checkLoginState = () => {
+        FB.getLoginStatus(function(response) {
+          if(response.status === 'connected') {
+            const token = response.authResponse.accessToken;
+            alertDialog.loading().then(() => {
+              return $http.post('/api/home/facebookLogin', {
+                token,
+              });
+            }).then(success => {
+              alertDialog.close();
+              $scope.setId(success.data.id);
+              configManager.deleteConfig();
+              if (success.data.type === 'normal') {
+                $state.go('user.index');
+              } else if (success.data.type === 'admin') {
+                $state.go('admin.index');
+              }
+            }).catch(err => {
+              alertDialog.show('登录失败', '确定');
+            });
+          }
+        });
+      };
+    }
+  ])
 ;

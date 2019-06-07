@@ -1,13 +1,12 @@
 const log4js = require('log4js');
 const logger = log4js.getLogger('flowSaver');
-const path = require('path');
 appRequire('plugins/flowSaver/server');
 appRequire('plugins/flowSaver/flow');
 appRequire('plugins/flowSaver/generateFlow');
+const accountFlow = appRequire('plugins/account/accountFlow');
 const cron = appRequire('init/cron');
 const knex = appRequire('init/knex').knex;
 const manager = appRequire('services/manager');
-const moment = require('moment');
 const minute = 1;
 const time = minute * 60 * 1000;
 
@@ -26,7 +25,6 @@ const saveFlow = async () => {
   try {
     const servers = await knex('server').select(['id', 'name', 'host', 'port', 'password', 'shift']);
     await updateAccountInfo();
-    const promises = [];
     const saveServerFlow = async server => {
       const lastestFlow = await knex('saveFlow').select(['time']).where({
         id: server.id,
@@ -57,18 +55,21 @@ const saveFlow = async () => {
         if(flow.length === 0) {
           return;
         }
-        const insertPromises = [];
+        flow.forEach(async f => {
+          await accountFlow.updateFlow(f.id, f.accountId, f.flow);
+        });
         for(let i = 0; i < Math.ceil(flow.length / 50); i++) {
-          const insert = knex('saveFlow').insert(flow.slice(i * 50, i * 50 + 50));
-          insertPromises.push(insert);
+          const insertFlow = flow.slice(i * 50, i * 50 + 50);
+          await knex('saveFlow').insert(insertFlow).catch();
+          logger.info(`[server: ${ server.id }] insert ${ insertFlow.length } flow`);
         }
-        await Promise.all(insertPromises);
       }
     };
-    servers.forEach(server => {
-      promises.push(saveServerFlow(server));
-    });
-    await Promise.all(promises);
+    for(const server of servers) {
+      await saveServerFlow(server).catch(err => {
+        logger.error(`[server: ${ server.id }] save flow error`);
+      });
+    }
   } catch(err) {
     logger.error(err);
     return;
@@ -77,4 +78,4 @@ const saveFlow = async () => {
 
 cron.minute(() => {
   saveFlow();
-}, 1);
+}, 'SaveFlow', 1);

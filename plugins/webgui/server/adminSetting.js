@@ -1,4 +1,8 @@
 const knex = appRequire('init/knex').knex;
+const user = appRequire('plugins/user/index');
+const ref = appRequire('plugins/webgui_ref/index');
+const refAdmin = appRequire('plugins/webgui_ref/admin');
+const refUser = appRequire('plugins/webgui_ref/user');
 
 const setDefaultValue = (key, value) => {
   knex('webguiSetting').select().where({
@@ -32,6 +36,7 @@ setDefaultValue('account', {
 });
 setDefaultValue('base', {
   title: 'Shadowsocks-Manager',
+  shortTitle: 'ssmgr',
   themeAccent: 'pink',
   themePrimary: 'blue',
   serviceWorker: false,
@@ -220,4 +225,165 @@ exports.modifyMail = (req, res) => {
     console.log(err);
     res.status(403).end();
   });
+};
+
+exports.changePassword = (req, res) => {
+  const oldPassword = req.body.password;
+  const newPassword = req.body.newPassword;
+  if(!oldPassword || !newPassword) {
+    return res.status(403).end();
+  }
+  const userId = req.session.user;
+  user.changePassword(userId, oldPassword, newPassword).then(success => {
+    res.send('success');
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.getTelegramCode = (req, res) => {
+  const telegramUser = appRequire('plugins/webgui_telegram/user');
+  const userId = req.session.user;
+  telegramUser.getCode(userId).then(success => {
+    res.send(success);
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.unbindTelegram = (req, res) => {
+  const telegramUser = appRequire('plugins/webgui_telegram/user');
+  const userId = req.session.user;
+  telegramUser.unbindUser(userId).then(success => {
+    res.send('success');
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.getRef = (req, res) => {
+  knex('webguiSetting').select().where({
+    key: 'webgui_ref',
+  }).then(success => {
+    if(!success.length) {
+      return Promise.reject('settings not found');
+    }
+    success[0].value = JSON.parse(success[0].value);
+    return success[0].value;
+  }).then(success => {
+    return res.send(success);
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.modifyRef = (req, res) => {
+  const data = req.body.data;
+  knex('webguiSetting').update({
+    value: JSON.stringify(data)
+  }).where({
+    key: 'webgui_ref',
+  }).then(success => {
+    return res.send('success');
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.getRefCode = (req, res) => {
+  const page = +req.query.page || 1;
+  const pageSize = +req.query.pageSize || 20;
+  const search = req.query.search;
+  refAdmin.getRefCodeAndPaging({
+    page,
+    pageSize,
+    search,
+  }).then(success => {
+    return res.send(success);
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.getOneRefCode = (req, res) => {
+  const id = req.params.id;
+  refAdmin.getOneRefCode(id).then(success => {
+    return res.send(success);
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.editOneRefCode = (req, res) => {
+  const id = +req.params.id;
+  const maxUser = +req.body.maxUser;
+  refAdmin.editOneRefCode(id, maxUser).then(success => {
+    return res.send(success);
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.getRefUser = (req, res) => {
+  const page = +req.query.page || 1;
+  const pageSize = +req.query.pageSize || 20;
+  refAdmin.getRefUserAndPaging({
+    page,
+    pageSize,
+  }).then(success => {
+    return res.send(success);
+  }).catch(err => {
+    console.log(err);
+    res.status(403).end();
+  });
+};
+
+exports.searchSourceUser = async (req, res) => {
+  try {
+    const search = req.body.search;
+    const users = await knex('user').select(['id', 'username']).where('username', 'like', `%${ search }%`).andWhere('id', '>', 1);
+    res.send(users);
+  } catch(err) {
+    console.log(err);
+    res.status(403).end();
+  }
+};
+
+exports.searchRefUser = async (req, res) => {
+  try {
+    const search = req.body.search;
+    const users = await knex('user').select([
+      'user.id as id',
+      'user.username as username',
+    ])
+    .leftJoin('webgui_ref', 'webgui_ref.userId', 'user.id')
+    .where('user.username', 'like', `%${ search }%`)
+    .where({ 'user.type': 'normal' })
+    .whereNull('webgui_ref.id');
+    res.send(users);
+  } catch(err) {
+    console.log(err);
+    res.status(403).end();
+  }
+};
+
+exports.setRefForUser = async (req, res) => {
+  try {
+    const sourceUserId = +req.params.sourceUserId;
+    const refUserId = +req.params.refUserId;
+    const code = req.params.code;
+    await refUser.setRefForUser(sourceUserId, refUserId, code);
+    res.send('success');
+  } catch(err) {
+    console.log(err);
+    res.status(403).end();
+  }
 };

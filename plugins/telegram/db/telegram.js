@@ -1,5 +1,3 @@
-'use strict';
-
 const knex = appRequire('init/knex').knex;
 const tableName = 'telegram';
 
@@ -8,7 +6,7 @@ const createTable = async() => {
   if(config.empty) {
     await knex.schema.dropTableIfExists(tableName);
   }
-  return knex.schema.createTableIfNotExists(tableName, function(table) {
+  return knex.schema.createTable(tableName, function(table) {
     table.string('key');
     table.string('value');
   });

@@ -1,20 +1,39 @@
 const log4js = require('log4js');
 const logger = log4js.getLogger('freeAccount');
-
+const rp = require('request-promise');
 const config = appRequire('services/config').all();
 const cron = appRequire('init/cron');
 const knex = appRequire('init/knex').knex;
 const manager = appRequire('services/manager');
 const port = config.plugins.freeAccount.port;
-const flow = config.plugins.freeAccount.flow;
-const time = config.plugins.freeAccount.time;
+let flow = config.plugins.freeAccount.flow;
+if(flow.toString().trim().substr(-1).toUpperCase() === 'K') {
+  flow = +flow.substr(0, flow.length - 1) * 1000;
+}
+if(flow.toString().trim().substr(-1).toUpperCase() === 'M') {
+  flow = +flow.substr(0, flow.length - 1) * 1000 * 1000;
+}
+if(flow.toString().trim().substr(-1).toUpperCase() === 'G') {
+  flow = +flow.substr(0, flow.length - 1) * 1000 * 1000 * 1000;
+}
+flow = +flow;
+let time = config.plugins.freeAccount.time;
+if(time.toString().trim().substr(-1).toUpperCase() === 'M') {
+  time = +time.substr(0, time.length - 1) * 60 * 1000;
+}
+if(time.toString().trim().substr(-1).toUpperCase() === 'H') {
+  time = +time.substr(0, time.length - 1) * 60 * 60 * 1000;
+}
+time = +time;
 const address = config.plugins.freeAccount.address;
 const method = config.plugins.freeAccount.method;
 const analytics = config.plugins.freeAccount.analytics || '';
+const password = config.plugins.freeAccount.password || '';
 
 let currentPassword = '';
 let updateTime = Date.now();
 let currentPort = 0;
+let qrcode;
 
 const randomPort = () => {
   const portString = port.toString();
@@ -38,7 +57,7 @@ randomPort();
 
 const randomPassword = () => {
   updateTime = Date.now();
-  currentPassword = Math.random().toString().substr(2, 10);
+  currentPassword = password + Math.random().toString().substr(2, 10);
   return currentPassword;
 };
 
@@ -154,6 +173,7 @@ const checkPort = async () => {
       await manager.send({ command: 'add', port: randomPort(), password: randomPassword() });
       await setKey('create', { time: Date.now() });
       await setKey('flow', { flow: 0 });
+      qrcode = 'ss://' + Buffer.from(`${ method }:${ currentPassword }@${ address }:${ currentPort }`).toString('base64');
     }
   }
 };
@@ -161,11 +181,14 @@ const checkPort = async () => {
 checkPort();
 cron.minute(() => {
   checkPort();
-}, 1);
+}, 'FreeAccountCheckPort', 1);
 
 const path = require('path');
 const express = require('express');
 const app = express();
+const bodyParser = require('body-parser');
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 app.engine('.html', require('ejs').__express);
 app.set('view engine', 'html');
 app.set('views', path.resolve('./plugins/freeAccount/views'));
@@ -175,14 +198,48 @@ const listenPort = config.plugins.freeAccount.listen.split(':')[1];
 const listenHost = config.plugins.freeAccount.listen.split(':')[0];
 app.get('/', (req, res) => {
   logger.info(`[${ req.ip }] /`);
+  qrcode = 'ss://' + Buffer.from(`${ method }:${ currentPassword }@${ address }:${ currentPort }`).toString('base64');
   return res.render('index', {
-    qrcode: 'ss://' + Buffer.from(`${ method }:${ currentPassword }@${ address }:${ currentPort }`).toString('base64'),
+    recaptcha: config.plugins.freeAccount.recaptcha ? config.plugins.freeAccount.recaptcha.site : '',
     analytics,
+    pay: config.plugins.freeAccount.pay,
+    ad: !!config.plugins.freeAccount.ad,
+    adClient: config.plugins.freeAccount.ad && config.plugins.freeAccount.ad.client,
+    adSlot: config.plugins.freeAccount.ad && config.plugins.freeAccount.ad.slot,
   });
 });
-app.get('/updateTime', (req, res) => {
-  logger.info(`[${ req.ip }] /updateTime`);
-  return res.send({ time: updateTime });
+app.post('/qrcode', async (req, res) => {
+  const token = req.body.token;
+  const ip = req.ip;
+  let recaptchaResult = {
+    success: true,
+    score: 1,
+  };
+  if(config.plugins.freeAccount.recaptcha) {
+    recaptchaResult = await rp({
+      uri: 'https://www.google.com/recaptcha/api/siteverify',
+      method: 'POST',
+      form: {
+        secret: config.plugins.freeAccount.recaptcha.secret,
+        response: token,
+        remoteip: ip,
+      },
+      json: true,
+    });
+  }
+  if(!recaptchaResult.success) { return res.send({
+    qrcode: 'ss://invalidRequest',
+    updateTime,
+  }); }
+  logger.info(`[${ ip }] ${ recaptchaResult.score }`);
+  if(recaptchaResult.score < 0.5) {
+    return res.send({
+    qrcode: 'ss://invalidRequest',
+    updateTime,
+    score: recaptchaResult.score,
+    });
+  }
+  res.send({ qrcode, updateTime, score: recaptchaResult.score, });
 });
 app.listen(listenPort, listenHost, () => {
   logger.info(`server start at ${ listenHost }:${ listenPort }`);

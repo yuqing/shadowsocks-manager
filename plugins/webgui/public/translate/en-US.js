@@ -24,6 +24,8 @@ module.exports = {
   '取消': 'Cancel',
   '关闭': 'Close',
   '下一步': 'Next',
+  '无效': 'not valid',
+  '已发送': 'has been sent',
 
   '服务器': 'Servers',
   '用户': 'Users',
@@ -48,6 +50,9 @@ module.exports = {
   '最近连接：': 'Last Connected:',
   '备注：': 'Comments:',
   '修改密码': 'Change Password',
+  '绑定Telegram': 'Binding Telegram',
+  '邀请码': 'Referral code',
+  'mac地址': 'MAC Address',
   '修改密码成功': 'Change password success',
   '修改密码失败': 'Change password fail',
   '续费': 'Recharge',

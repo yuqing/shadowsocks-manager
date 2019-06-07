@@ -3,10 +3,8 @@ const tableName = 'mac_account';
 
 const createTable = async() => {
   const exist = await knex.schema.hasTable(tableName);
-  if(exist) {
-    return;
-  }
-  return knex.schema.createTableIfNotExists(tableName, function(table) {
+  if(exist) { return; }
+  return knex.schema.createTable(tableName, function(table) {
     table.increments('id');
     table.string('mac').unique();
     table.integer('userId');

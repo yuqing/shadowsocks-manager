@@ -11,17 +11,23 @@
 A shadowsocks manager tool for multi user and traffic control.  
 Base on Node.js and SQLite.
 
-For more details, you can see [the wiki page](https://github.com/shadowsocks/shadowsocks-manager/wiki).
+For more details, you can see [docs](https://shadowsocks.github.io/shadowsocks-manager/).
 
 If you want to use the old version, please switch to [this branch](https://github.com/shadowsocks/shadowsocks-manager/tree/version1).
 
 ## WebGUI Demo:
 
-[https://wall.gyteng.com](https://wall.gyteng.com)
+[https://shadowghost.app](https://ssmgr.gyteng.com)
+
+## FreeAccount Demo:
+
+[https://free.gyteng.com](https://free2.gyteng.com)
+
 
 ## Dependencies
 
-Node.js 6.*
+* Node.js 10.*
+* Redis
 
 ## Install
 
@@ -38,6 +44,10 @@ use `node server.js` to run this program.
 ```
 npm i -g shadowsocks-manager
 ```
+You may need to use the `--unsafe-perm` flag if you receive an permission error
+```
+npm i -g shadowsocks-manager --unsafe-perm
+```
 use `ssmgr` to run this program.
 
 ### From docker:
@@ -50,25 +60,29 @@ docker run --name ssmgr -idt -v ~/.ssmgr:/root/.ssmgr --net=host gyteng/ssmgr [s
 here is the `Dockerfile`
 
 ```
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 MAINTAINER gyteng <igyteng@gmail.com>
 RUN apt-get update && \
-    apt-get install tzdata net-tools curl git sudo software-properties-common python-pip -y && \
+    export DEBIAN_FRONTEND=noninteractive && \
+    apt-get install tzdata iproute2 curl git sudo software-properties-common python-pip -y && \
     pip install git+https://github.com/shadowsocks/shadowsocks.git@master && \
-    add-apt-repository ppa:max-c-lv/shadowsocks-libev -y && \
-    curl -sL https://deb.nodesource.com/setup_6.x | bash - && \
+    curl -sL https://deb.nodesource.com/setup_8.x | bash - && \
     apt-get install -y nodejs shadowsocks-libev && \
-    npm i -g shadowsocks-manager && \
+    npm i -g shadowsocks-manager --unsafe-perm && \
     echo "Asia/Shanghai" > /etc/timezone && \
     rm /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata
-ENTRYPOINT ["/usr/bin/ssmgr"]
+CMD ["/usr/bin/ssmgr"]
 ```
 
 ### Usage
 1. Start shadowsocks with [manager API](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users), it supports `shadowsocks-python` and `shadowsocks-libev`.
 For example, you can run this command:  
-`ss-manager -m aes-256-cfb -u --manager-address 127.0.0.1:6001`
+```
+ss-manager -m aes-256-cfb -u --manager-address 127.0.0.1:6001
+ or
+ssserver -m aes-256-cfb -p 12345 -k abcedf --manager-address 127.0.0.1:6001
+```
 2. run ssmgr with type s:
 
   config file:  
@@ -124,7 +138,7 @@ The listening address in `--manager-address` of step 1 and in `shadowsocks -> ad
 ```
 
 ### Plugins
-[cli](https://github.com/shadowsocks/shadowsocks-manager/blob/master/plugins/cli/README.md)  
+
 [telegram](https://github.com/shadowsocks/shadowsocks-manager/blob/master/plugins/telegram/README.md)  
 [freeAccount](https://github.com/shadowsocks/shadowsocks-manager/blob/master/plugins/freeAccount/README.md)  
 [webgui](https://github.com/shadowsocks/shadowsocks-manager/blob/master/plugins/webgui/README.md)  
@@ -156,7 +170,7 @@ First, ssmgr will read the config file in `--config`, and other parameters(`-det
 
 If your want to help to translate it to other languages, please edit files [here](https://github.com/shadowsocks/shadowsocks-manager/tree/dev/plugins/webgui/public/translate) and give me a pull request.
 
-### Telegram
+### Telegram Group
 Join the group if you have some problem: [https://t.me/ssmgr](https://t.me/ssmgr)
 
 ### VPS recommendation
@@ -165,13 +179,11 @@ Join the group if you have some problem: [https://t.me/ssmgr](https://t.me/ssmgr
 
 * [DigitalOcean](https://m.do.co/c/d43891b79a52)
 
-* [Vultr](http://www.vultr.com/?ref=6926595)
+* [Vultr](https://www.vultr.com/?ref=6926595)
 
 * [AlibabaCloud](https://account-intl.aliyun.com/register/intl_register.htm?biz_params=%7B%22intl%22%3A%22%7B%5C%22referralCode%5C%22%3A%5C%22koa26v%5C%22%7D%22%7D)
 
 * [BandwagonHost](https://bandwagonhost.com/aff.php?aff=19999)
-
-* [dediserve](https://manage.dediserve.com/?affid=841)
 
 ### Donate
 If you find this project helpful, please consider making a donation:  
@@ -181,3 +193,6 @@ If you find this project helpful, please consider making a donation:
 
 * WeChat Pay  
 <img src="https://github.com/gyteng/gyteng.github.com/raw/master/media/pic/wechat.png" width="160">
+
+* Paypal  
+[Donate link](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=8UQZLYGCTSLGQ&source=url)
